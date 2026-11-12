@@ -23,13 +23,19 @@ async function openPortal(profile) {
     while (Date.now() < deadline) {
       await wait(350);
       const tab = await chrome.tabs.get(id);
-      if (tab.status !== 'complete' || tab.pendingUrl || tab.url === 'about:blank') continue;
+      if (!tab.url || tab.pendingUrl || tab.url === 'about:blank') continue;
       const current = tab.url ? new URL(tab.url) : null;
       if (current?.origin !== portal.origin) {
         notice.textContent = 'Continue sign-in in the portal tab.';
         break;
       }
       if (!current.pathname.startsWith('/account/')) {
+        const [state] = await chrome.scripting.executeScript({
+          target: { tabId: id }, injectImmediately: true, args: [current.href],
+          func: expected => location.href === expected && document.readyState !== 'loading' &&
+            Boolean(document.body) && !document.querySelector('input[type="password"]')
+        }).catch(() => []);
+        if (!state?.result) continue;
         await chrome.tabs.update(id, { active: true });
         await chrome.tabs.remove(launcher.id);
         return;
@@ -40,7 +46,7 @@ async function openPortal(profile) {
       }
       if (submitted) {
         const [state] = await chrome.scripting.executeScript({
-          target: { tabId: id },
+          target: { tabId: id }, injectImmediately: true,
           func: () => {
             const text = document.body?.innerText ?? '';
             return /invalid email address or password|incorrect password|invalid credentials/i.test(text);
@@ -53,10 +59,19 @@ async function openPortal(profile) {
         continue;
       }
 
+      const [ready] = await chrome.scripting.executeScript({
+        target: { tabId: id }, injectImmediately: true, func: submitSlateLogin, args: [current.href]
+      }).catch(() => []);
+      if (ready?.result !== 'supported') {
+        if (!ready || ready.result === 'changed' || tab.status !== 'complete') continue;
+        notice.textContent = 'Continue sign-in in the portal tab.';
+        break;
+      }
       const [attempt] = await chrome.scripting.executeScript({
-        target: { tabId: id }, func: submitSlateLogin,
+        target: { tabId: id }, injectImmediately: true, func: submitSlateLogin,
         args: [current.href, profile.email, profile.password]
       });
+      if (attempt?.result === 'changed') continue;
       if (attempt?.result !== 'submitted') {
         notice.textContent = attempt?.result === 'verification'
           ? 'Complete verification in the portal tab.'
