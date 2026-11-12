@@ -1,0 +1,88 @@
+:root {
+  font: 15px/1.45 Inter, system-ui, sans-serif;
+  color: #17241e;
+  background: #f7faf7;
+}
+
+body { margin: 0; inline-size: 344px; }
+main { padding: 14px; }
+#preview {
+  max-block-size: 300px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+#preview:focus-visible { outline: 2px solid #205bb0; outline-offset: 2px; }
+#message:empty { margin: 0; }
+h1 { font-size: 1.5rem; margin: 0; }
+h2 { font-size: 1rem; margin: 16px 0 4px; }
+p { margin: 6px 0 12px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+button {
+  min-block-size: 44px;
+  padding: 6px 12px;
+  border: 1px solid #24553e;
+  border-radius: 4px;
+  background: #24553e;
+  color: #fff;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+#download { background: transparent; color: #24553e; }
+button:disabled { opacity: .65; cursor: wait; }
+button:focus-visible { outline: 3px solid #205bb0; outline-offset: 2px; }
+ul { margin: 0; padding: 0; list-style: none; }
+li { padding: 8px 0; border-bottom: 1px solid #c6d3cb; }
+li span { display: block; color: #374b41; font-size: .9rem; }
+
+.settings { inline-size: auto; max-inline-size: 38rem; margin-inline: auto; }
+label { display: block; margin-block-start: 10px; font-weight: 650; }
+input, select, textarea {
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-block-size: 40px;
+  margin-block: 4px 10px;
+  padding: 6px 8px;
+  border: 1px solid #52665b;
+  border-radius: 4px;
+  background: #fff;
+  color: #17241e;
+  font: inherit;
+}
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 3px solid #205bb0;
+  outline-offset: 2px;
+}
+#login-profiles { margin-block-start: 10px; }
+
+:root { color: #212121; background: #f3f3f1; }
+.popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #202020;
+  color: #fff;
+  border-bottom: 4px solid #ffcd00;
+}
+.popup-header h1 { font-size: 1.25rem; }
+button { color: #212121; background: white; border-color: #656565; }
+#add-school, #import, #import-school, #add-school-form button {
+  color: #212121;
+  background: #ffcd00;
+  border-color: #775f00;
+}
+#add-school { width: 44px; padding: 0; font-size: 1.65rem; line-height: 1; }
+#add-school-form {
+  margin-bottom: 12px;
+  padding: 12px;
+  background: white;
+  border: 1px solid #d8d8d3;
+  border-radius: 6px;
+}
+#import-school { margin-bottom: 10px; }
+#set-up-login:not([hidden]) { display: inline-flex; align-items: center; min-height: 44px; }
+#add-school-message:empty { display: none; }
+#download { color: #212121; }

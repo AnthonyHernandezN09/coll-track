@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Coll-Track",
+  "version": "0.9.0",
+  "minimum_chrome_version": "106",
+  "description": "Preview application checklists from college portals.",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "action": {
+    "default_title": "Coll-Track",
+    "default_popup": "popup.html"
+  },
+  "options_ui": {
+    "page": "profiles.html",
+    "open_in_tab": true
+  },
+  "host_permissions": [
+    "http://127.0.0.1/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "tracker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://127.0.0.1/*"
+      ],
+      "js": [
+        "dashboard-launch.js"
+      ]
+    }
+  ]
+}

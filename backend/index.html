@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Coll-Track</title>
+  <link rel="stylesheet" href="/dashboard.css">
+  <script src="/dashboard.js" defer></script>
+</head>
+<body>
+  <header><div class="shell"><a href="/">Coll-Track</a><span>Application dashboard</span>
+    <button id="settings-open" class="icon-button" type="button" aria-label="Settings" title="Settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+  </div></header>
+  <main class="shell">
+    <section class="school-section" aria-labelledby="saved-title">
+      <div class="section-heading">
+        <h1 id="saved-title">My universities</h1>
+        <div class="school-actions">
+          <button id="arrange" class="icon-button" type="button" aria-pressed="false" aria-label="Edit cards" title="Edit cards"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M10 14l1-4 7-7 3 3-7 7-4 1Z"/></svg></button>
+          <button id="add-school" class="icon-button" type="button" aria-label="Add school" title="Add school">+</button>
+        </div>
+      </div>
+      <p id="arrange-message" role="status"></p>
+      <div id="schools" class="school-grid"></div>
+    </section>
+    <div class="dashboard">
+      <section class="card feed" aria-labelledby="updates-title">
+        <h2 id="updates-title">Portal activity</h2>
+        <div class="filters" aria-label="Filter updates">
+          <button type="button" data-filter="unread" aria-pressed="true">Unread</button>
+          <button type="button" data-filter="read" aria-pressed="false">Read</button>
+          <button type="button" data-filter="all" aria-pressed="false">All updates</button>
+        </div>
+        <p id="message" role="status">Loading updates…</p>
+        <ul id="updates"></ul>
+      </section>
+    </div>
+  </main>
+  <dialog id="settings-dialog" aria-labelledby="settings-title">
+    <div class="branding-header">
+      <h2 id="settings-title">Coll-Track settings</h2>
+      <button id="settings-close" type="button">Done</button>
+    </div>
+    <section class="settings-body" aria-labelledby="trackers-title">
+      <h3 id="trackers-title">Automatic checks</h3>
+      <p class="hint">Checks run on this Mac while you’re signed in to macOS.</p>
+      <form id="tracker-defaults" class="track-controls">
+        <label>Check all portals every (minutes)
+          <input name="interval" type="number" min="1" max="10080" step="1" required>
+        </label>
+        <button type="submit">Apply to all</button>
+      </form>
+      <p id="tracker-message" role="status"></p>
+      <ul id="trackers"></ul>
+    </section>
+  </dialog>
+  <dialog id="school-dialog" aria-labelledby="school-dialog-title">
+    <div class="branding-header">
+      <h2 id="school-dialog-title">Add school</h2>
+      <button id="school-close" type="button">Done</button>
+    </div>
+    <div class="branding-panels">
+      <form id="school-fields">
+        <label for="school-name">School name</label>
+        <input id="school-name" required maxlength="120">
+        <label for="school-portal">Portal address</label>
+        <input id="school-portal" type="url" required placeholder="https://">
+        <button class="branding-primary" type="submit">Save school</button>
+        <p id="school-message" role="status"></p>
+      </form>
+      <div id="school-edit-actions" hidden>
+        <a id="school-login" class="launch" data-edit-login>Manage saved logins</a>
+        <button id="school-style" type="button">Edit color and logo</button>
+        <button id="branding-open" type="button">Brandfetch settings</button>
+      </div>
+    </div>
+  </dialog>
+  <dialog id="branding-dialog" aria-labelledby="branding-title">
+    <div class="branding-header">
+      <h2 id="branding-title">School branding</h2>
+      <button id="branding-close" type="button">Done</button>
+    </div>
+    <div class="branding-panels">
+    <form id="branding-mode">
+      <fieldset class="branding-mode-options">
+        <legend>Branding source</legend>
+        <label class="branding-choice"><input type="radio" name="mode" value="manual" checked> Manual</label>
+        <label class="branding-choice"><input type="radio" name="mode" value="automatic"> Brandfetch</label>
+      </fieldset>
+      <div id="branding-key-row" hidden>
+        <label for="branding-key">Brandfetch API key</label>
+        <input id="branding-key" type="password" autocomplete="off" maxlength="512">
+        <small id="branding-key-hint"></small>
+      </div>
+      <fieldset id="branding-school-list" hidden>
+        <legend>Schools to look up</legend>
+        <label class="branding-choice branding-select-all"><input id="branding-select-all" type="checkbox"> Select all schools</label>
+        <div id="branding-hosts"></div>
+        <small id="branding-count" aria-live="polite"></small>
+      </fieldset>
+      <button class="branding-primary" type="submit">Save branding settings</button>
+    </form>
+    <form id="school-branding" hidden>
+      <h3>Customize a school</h3>
+      <p class="hint">Your edits take priority for this card.</p>
+      <label for="branding-school">University</label>
+      <select id="branding-school"></select>
+      <label for="branding-color">Accent color</label>
+      <input id="branding-color" type="text" placeholder="#003366" pattern="#[0-9A-Fa-f]{6}" maxlength="7">
+      <label for="branding-logo">Replace logo</label>
+      <input id="branding-logo" type="file" accept="image/png,image/jpeg,image/webp">
+      <small>PNG, JPEG, or WebP up to 512 KB. Leave blank to keep the current logo.</small>
+      <div class="school-actions">
+        <button class="branding-primary" type="submit">Save school style</button>
+        <button id="branding-reset" type="button">Reset school style</button>
+      </div>
+    </form>
+    </div>
+    <p id="branding-message" role="status"></p>
+  </dialog>
+</body>
+</html>

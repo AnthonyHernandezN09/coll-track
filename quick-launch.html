@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quick launch · Coll-Track</title>
+  <link rel="stylesheet" href="popup.css">
+  <script src="local-backend.js" defer></script>
+  <script src="slate-login.js" defer></script>
+  <script src="quick-launch.js" defer></script>
+</head>
+<body class="settings">
+  <main>
+    <h1 id="title">Quick launch</h1>
+    <p id="launch-message" role="status">Finding the portal…</p>
+    <form id="launch-form" hidden>
+      <label for="launch-profile">Saved login</label>
+      <select id="launch-profile" required></select>
+      <button>Open portal and sign in</button>
+    </form>
+    <p><a id="add-login" hidden>Add a saved login</a></p>
+    <p><a id="manual" target="_blank" rel="noopener noreferrer" hidden>Open portal manually</a></p>
+  </main>
+</body>
+</html>

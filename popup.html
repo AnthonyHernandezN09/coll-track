@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Coll-Track</title>
+  <link rel="stylesheet" href="popup.css">
+  <script src="popup.js" defer></script>
+  <script src="local-backend.js" defer></script>
+  <script src="login-vault.js" defer></script>
+  <script src="slate-login.js" defer></script>
+  <script src="popup-login.js" defer></script>
+</head>
+<body>
+  <header class="popup-header">
+    <h1>Coll-Track</h1>
+    <button id="add-school" type="button" aria-label="Add school" aria-expanded="false" aria-controls="add-school-form" title="Add school">+</button>
+  </header>
+  <main>
+    <button id="import-school" type="button" hidden>Import this school</button>
+    <form id="add-school-form" hidden>
+      <label for="new-school-name">School name</label>
+      <input id="new-school-name" maxlength="120" required>
+      <label for="new-school-portal">Portal address</label>
+      <input id="new-school-portal" type="url" required placeholder="https://">
+      <button type="submit">Save school</button>
+      <p id="add-school-message" role="status"></p>
+      <a id="set-up-login" hidden>Set up saved login</a>
+    </form>
+    <p id="instructions">Import from your open college checklist.</p>
+    <div class="actions">
+      <button id="import" type="button">Import checklist</button>
+      <button id="track" type="button" hidden>Track this portal</button>
+      <button id="download" type="button" hidden>Download JSON</button>
+    </div>
+    <section id="login-profiles">
+      <div class="actions">
+        <button id="manage-profiles" type="button">Manage logins</button>
+        <button id="open-dashboard" type="button">Open dashboard</button>
+      </div>
+      <form id="choose-login" hidden>
+        <label for="saved-login">Login for this portal</label>
+        <select id="saved-login" required></select>
+        <button>Sign in to portal</button>
+      </form>
+      <p id="login-notice" role="status"></p>
+    </section>
+    <p id="message" role="status" aria-live="polite"></p>
+    <div id="preview" role="region" aria-label="Checklist preview" tabindex="0" hidden></div>
+  </main>
+</body>
+</html>
