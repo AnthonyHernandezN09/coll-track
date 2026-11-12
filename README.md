@@ -36,3 +36,11 @@ The Mac service runs scheduled checks while your Mac is awake and you’re signe
 ## Local data
 
 The dashboard listens on localhost and has no app sign-in. The service stores snapshots, settings, and encrypted login profiles under `~/Library/Application Support/Coll-Track`. Keep that directory and exported checklist files out of Git. Brandfetch is optional and requires your own API key.
+
+## License and university portal use
+
+Coll-Track is released under the [MIT License](LICENSE). You may use, modify, share, or sell the code, including in commercial projects. Keep the license and copyright notice crediting Anthony Hernandez with copies or substantial portions of the code.
+
+Coll-Track and its browser extension interact with university portals, including signing in and reading application information. Use them only with accounts you are authorized to access and in accordance with each university’s rules. Universities control their portals and may restrict automated access or take action on accounts or applications.
+
+To the extent permitted by applicable law, Anthony Hernandez is not liable for lost, corrupted, or unavailable information, or for any action taken by a university in connection with your use of Coll-Track, including blocked access, account suspension, or action affecting an application. Coll-Track is provided as is, without warranty, under the terms of the MIT License.
