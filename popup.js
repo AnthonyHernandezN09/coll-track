@@ -4,7 +4,10 @@ const message = document.querySelector('#message');
 const preview = document.querySelector('#preview');
 let currentImport = null;
 let trackingUrl = null;
-const trackButton = document.querySelector('#track');
+const trackForm = document.querySelector('#tracking-settings');
+const pauseTrack = document.querySelector('#pause-track');
+const trackInterval = document.querySelector('#tracking-interval');
+const trackProfile = document.querySelector('#tracking-profile');
 
 function add(parent, tag, value) {
   const element = document.createElement(tag);
@@ -39,7 +42,7 @@ function render(result) {
 importButton.addEventListener('click', async () => {
   currentImport = null;
   trackingUrl = null;
-  trackButton.hidden = true;
+  trackForm.hidden = true;
   preview.replaceChildren();
   preview.hidden = true;
   downloadButton.hidden = true;
@@ -90,12 +93,29 @@ importButton.addEventListener('click', async () => {
     currentImport = { school, source: url.origin + url.pathname, importedAt: new Date().toISOString(), ...result };
     message.textContent = `${school} · ${count} checklist ${count === 1 ? 'item' : 'items'}`;
     downloadButton.hidden = false;
+    if (result.unreadable.length || result.checklists.some(section => section.skippedRows)) {
+      add(preview, 'p', 'This checklist is incomplete. Open the full checklist and try again to save it.');
+      return;
+    }
     url.hash = '';
     trackingUrl = url;
     try {
       await LocalBackend.request('/snapshots', currentImport);
       message.textContent += ' · Saved on this Mac';
-      trackButton.hidden = false;
+      const [trackers, defaults, profiles] = await Promise.all([
+        LocalBackend.request('/trackers'), LocalBackend.request('/trackers/defaults'),
+        LocalBackend.request('/trackers/profiles')
+      ]);
+      const tracker = trackers.find(record => record.source === currentImport.source);
+      trackInterval.value = tracker?.interval ?? defaults.interval;
+      trackProfile.replaceChildren(new Option('Use the only matching login', ''));
+      for (const profile of profiles.filter(profile => profile.hosts.includes(url.hostname))) {
+        trackProfile.add(new Option(profile.name, profile.id));
+      }
+      trackProfile.value = tracker?.profile_id ?? '';
+      if (trackProfile.selectedIndex === -1) trackProfile.selectedIndex = 0;
+      pauseTrack.hidden = !tracker?.enabled;
+      trackForm.hidden = false;
     } catch (error) {
       add(preview, 'p', error.message);
     }
@@ -117,22 +137,25 @@ downloadButton.addEventListener('click', () => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 
-trackButton.addEventListener('click', async () => {
+trackForm.addEventListener('submit', async event => {
+  event.preventDefault();
   const url = trackingUrl;
   const snapshot = currentImport;
   if (!url || !snapshot) return;
-  trackButton.disabled = true;
+  const enabled = event.submitter !== pauseTrack;
+  trackForm.inert = true;
   importButton.disabled = true;
   try {
     await LocalBackend.request('/trackers/register', {
-      url: url.href, source: snapshot.source, school: snapshot.school
+      url: url.href, source: snapshot.source, school: snapshot.school,
+      interval: trackInterval.valueAsNumber, enabled, profileId: trackProfile.value || null
     });
-    message.textContent = 'Tracking is on. Change the interval in the dashboard.';
-    trackButton.hidden = true;
+    message.textContent = enabled ? 'Check schedule saved.' : 'Automatic checks paused.';
+    pauseTrack.hidden = !enabled;
   } catch (error) {
     message.textContent = error.message;
   } finally {
-    trackButton.disabled = false;
+    trackForm.inert = false;
     importButton.disabled = false;
   }
 });

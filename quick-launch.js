@@ -2,6 +2,7 @@ const launchForm = document.querySelector('#launch-form');
 const profileSelect = document.querySelector('#launch-profile');
 const notice = document.querySelector('#launch-message');
 const manual = document.querySelector('#manual');
+const manageLogins = document.querySelector('#manage-logins');
 let portal;
 let profiles = [];
 let launching = false;
@@ -12,6 +13,7 @@ async function openPortal(profile) {
   if (launching) return;
   launching = true;
   launchForm.hidden = true;
+  manageLogins.hidden = true;
   notice.textContent = 'Opening ' + portal.hostname + '…';
 
   let id;
@@ -20,6 +22,7 @@ async function openPortal(profile) {
     ({ id } = await chrome.tabs.create({ url: portal.href, active: false }));
     let deadline = Date.now() + 18000;
     let submitted = false;
+    let followedLoginLink = false;
     while (Date.now() < deadline) {
       await wait(350);
       const tab = await chrome.tabs.get(id);
@@ -31,16 +34,41 @@ async function openPortal(profile) {
       }
       if (!current.pathname.startsWith('/account/')) {
         const [state] = await chrome.scripting.executeScript({
-          target: { tabId: id }, injectImmediately: true, args: [current.href],
-          func: expected => location.href === expected && document.readyState !== 'loading' &&
-            Boolean(document.body) && !document.querySelector('input[type="password"]')
+          target: { tabId: id }, injectImmediately: true,
+          args: [current.href, !submitted && !followedLoginLink],
+          func: (expected, findLogin) => {
+            if (location.href !== expected || document.readyState === 'loading' ||
+                !document.body || document.querySelector('input[type="password"]')) return null;
+            const loginLinks = new Set();
+            if (findLogin) {
+              for (const anchor of document.querySelectorAll('a[href]')) {
+                if (!(anchor instanceof HTMLAnchorElement) ||
+                    !/^(log|sign) in$/i.test((anchor.getAttribute('aria-label') || anchor.innerText).trim()) ||
+                    !anchor.getClientRects().length || getComputedStyle(anchor).visibility === 'hidden') continue;
+                let url;
+                try {
+                  url = new URL(anchor.href);
+                } catch {
+                  continue;
+                }
+                if (url.origin === location.origin && !url.username && !url.password &&
+                    url.pathname.replace(/\/$/, '') === '/account/login') loginLinks.add(url.href);
+              }
+            }
+            return { loginUrl: loginLinks.size === 1 ? [...loginLinks][0] : null };
+          }
         }).catch(() => []);
         if (!state?.result) continue;
+        if (state.result.loginUrl) {
+          followedLoginLink = true;
+          await chrome.tabs.update(id, { url: state.result.loginUrl });
+          continue;
+        }
         await chrome.tabs.update(id, { active: true });
         await chrome.tabs.remove(launcher.id);
         return;
       }
-      if (current.pathname !== '/account/login') {
+      if (current.pathname.replace(/\/$/, '') !== '/account/login') {
         notice.textContent = 'Complete the remaining sign-in step in the portal tab.';
         break;
       }
@@ -54,6 +82,7 @@ async function openPortal(profile) {
         });
         if (state?.result) {
           notice.textContent = 'The portal rejected this login. Check the saved details in Manage logins.';
+          manageLogins.hidden = false;
           break;
         }
         continue;
@@ -115,16 +144,69 @@ launchForm.addEventListener('submit', async event => {
   }
 });
 
+const setup = document.querySelector('#setup-login');
+const setupMode = document.querySelector('#setup-mode');
+const setupCredentials = document.querySelector('#setup-credentials');
+const setupHint = document.querySelector('#setup-default-hint');
+let hasDefault = false;
+
+function updateSetup() {
+  const useDefault = setupMode.value === 'default';
+  setupCredentials.hidden = useDefault;
+  setup.elements.email.disabled = setup.elements.password.disabled = useDefault;
+  setupHint.hidden = !hasDefault || setupMode.value !== 'new-default';
+}
+
+setupMode.addEventListener('change', updateSetup);
+setup.addEventListener('submit', async event => {
+  event.preventDefault();
+  const fields = new FormData(setup);
+  const mode = fields.get('mode');
+  const login = { mode };
+  if (mode !== 'default') {
+    login.email = fields.get('email').trim();
+    login.password = fields.get('password');
+  }
+  setup.inert = true;
+  try {
+    await LocalBackend.request('/schools/login', { host: portal.hostname, url: portal.href, login });
+    setup.elements.password.value = '';
+    const { profiles: savedProfiles } = await LocalBackend.request('/profiles');
+    profiles = savedProfiles.filter(profile => profile.hosts.includes(portal.hostname));
+    const preferred = profiles.find(profile => profile.id === 'coll-track-default' && mode !== 'separate') ??
+      profiles.find(profile => profile.name === portal.hostname + ' · School login');
+    showProfiles(preferred);
+    setup.hidden = true;
+    notice.textContent = 'Login saved. Open the portal to sign in.';
+    launchForm.querySelector('button').focus();
+  } catch (error) {
+    notice.textContent = error.message;
+  } finally {
+    setup.inert = false;
+  }
+});
+
+function showProfiles(preferred) {
+  profileSelect.replaceChildren(...profiles.map(profile =>
+    new Option(profile.name + ' · ' + profile.email, profile.id)));
+  if (preferred) profileSelect.value = preferred.id;
+  else profileSelect.selectedIndex = -1;
+  launchForm.hidden = false;
+}
+
 async function initializeLaunch() {
   try {
     const source = new URLSearchParams(location.search).get('source');
     const [snapshots, trackers] = await Promise.all([
       LocalBackend.request('/snapshots'), LocalBackend.request('/trackers')
     ]);
-    const saved = snapshots.find(snapshot => snapshot.source === source);
+    const saved = snapshots.find(snapshot => snapshot.source === source) ??
+      snapshots.find(snapshot => new URL(snapshot.source).origin + '/' === source);
     if (!saved) throw new Error('This portal is no longer in your saved checklists.');
     const base = new URL(saved.source);
-    const trackedUrl = trackers.find(tracker => tracker.source === source)?.url;
+    const tracker = trackers.find(tracker => tracker.source === source) ??
+      trackers.find(tracker => new URL(tracker.source).hostname === base.hostname);
+    const trackedUrl = tracker?.url;
     portal = new URL(saved.portal ?? trackedUrl ?? saved.source);
     if (portal.protocol !== 'https:' || portal.origin !== base.origin || portal.port ||
         portal.username || portal.password) throw new Error('This portal address is unsupported.');
@@ -136,25 +218,27 @@ async function initializeLaunch() {
     const { profiles: allProfiles } = await LocalBackend.request('/profiles');
     profiles = allProfiles.filter(profile => profile.hosts.includes(portal.hostname));
     if (!profiles.length) {
-      const addLogin = document.querySelector('#add-login');
-      addLogin.href = 'profiles.html?' + new URLSearchParams({ source: saved.source });
-      addLogin.hidden = false;
-      notice.textContent = 'No saved login for ' + portal.hostname + '.';
-      addLogin.focus();
+      hasDefault = allProfiles.some(profile => profile.id === 'coll-track-default');
+      if (hasDefault) {
+        setupMode.add(new Option('Use default login', 'default'), 0);
+        setupMode.value = 'default';
+        setupMode.querySelector('option[value="new-default"]').textContent = 'Replace and use default login';
+      }
+      updateSetup();
+      setup.hidden = false;
+      notice.textContent = 'Choose a login for this school.';
+      setupMode.focus();
       return;
     }
 
-    for (const profile of profiles) {
-      const option = new Option(profile.name + ' · ' + profile.email, profile.id);
-      profileSelect.add(option);
-    }
     const allowed = await chrome.permissions.contains({ origins: [portal.origin + '/*'] });
-    if (profiles.length === 1 && allowed) {
-      await openPortal(profiles[0]);
+    const preferred = profiles.find(profile => profile.id === tracker?.profile_id) ??
+      (profiles.length === 1 ? profiles[0] : null);
+    if (preferred && allowed) {
+      await openPortal(preferred);
       return;
     }
-    if (profiles.length > 1) profileSelect.selectedIndex = -1;
-    launchForm.hidden = false;
+    showProfiles(preferred);
     notice.textContent = allowed
       ? 'Choose a saved login for ' + portal.hostname + '.'
       : 'Chrome will ask for access to ' + portal.hostname + ' the first time.';

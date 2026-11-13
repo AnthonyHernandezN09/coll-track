@@ -1,7 +1,7 @@
 function submitSlateLogin(expectedUrl, email, password) {
   const url = new URL(location.href);
   if (url.href !== expectedUrl || url.protocol !== 'https:' || url.port ||
-      url.pathname !== '/account/login') return 'changed';
+      url.pathname.replace(/\/$/, '') !== '/account/login') return 'changed';
   const returns = url.searchParams.getAll('r');
   try {
     if (returns.some(value => new URL(value, url).origin !== url.origin)) return 'unsupported';
@@ -15,9 +15,10 @@ function submitSlateLogin(expectedUrl, email, password) {
 
   const forms = [...document.querySelectorAll('form[data-fw-form="1"]')];
   const matching = forms.flatMap(form => {
-    const user = form.querySelector('input[type="email"][name="email"]');
+    if (form.querySelectorAll('input[name="email"], input[type="password"]').length !== 2) return [];
+    const user = form.querySelector('input[name="email"]:is([type="email"], [type="text"], :not([type]))');
     const secret = form.querySelector('input[type="password"][name="password"]');
-    const submit = form.querySelector('button[type="submit"]');
+    const submit = form.querySelector('button:not([type]), button[type="submit"], input[type="submit"]');
     if (!user || !secret || !submit || !/FW\.Postback\(this\)/.test(submit.getAttribute('onclick') ?? '')) {
       return [];
     }

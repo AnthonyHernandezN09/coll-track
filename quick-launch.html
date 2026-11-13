@@ -18,7 +18,22 @@
       <select id="launch-profile" required></select>
       <button>Open portal and sign in</button>
     </form>
-    <p><a id="add-login" hidden>Add a saved login</a></p>
+    <form id="setup-login" hidden>
+      <label for="setup-mode">Portal login</label>
+      <select id="setup-mode" name="mode">
+        <option value="separate">Save a separate login</option>
+        <option value="new-default">Save as default login</option>
+      </select>
+      <div id="setup-credentials">
+        <label for="setup-email">Email</label>
+        <input id="setup-email" name="email" type="email" autocomplete="username" required maxlength="1024">
+        <label for="setup-password">Password</label>
+        <input id="setup-password" name="password" type="password" autocomplete="current-password" required maxlength="1024">
+      </div>
+      <p id="setup-default-hint" hidden>Replacing the default updates the login for every school that uses it.</p>
+      <button type="submit">Save login</button>
+    </form>
+    <p><a id="manage-logins" href="profiles.html" target="_blank" rel="noopener noreferrer" hidden>Manage logins</a></p>
     <p><a id="manual" target="_blank" rel="noopener noreferrer" hidden>Open portal manually</a></p>
   </main>
 </body>

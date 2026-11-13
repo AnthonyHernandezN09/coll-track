@@ -13,9 +13,11 @@ const trackerStatus = {
   permission: 'Set up a saved portal login.',
   missing_login: 'Save a login for this portal.',
   choose_login: 'Choose a saved login for this portal.',
-  login_failed: 'Review the saved login. The portal did not complete sign-in.',
+  login_failed: 'The portal rejected the saved login.',
+  login_timeout: 'The portal did not finish signing in.',
+  status_page_missing: 'Enter the application status page address.',
   verification: 'The portal requires verification or uses an unsupported sign-in.',
-  unreadable: 'Checklist could not be read', error: 'Check failed. Will retry.'
+  unreadable: 'Checklist could not be read.', error: 'Check failed.'
 };
 let updates = [];
 let filter = 'unread';
@@ -25,6 +27,25 @@ function add(parent, tag, text = '') {
   element.textContent = text;
   parent.append(element);
   return element;
+}
+
+const actionIcons = {
+  edit: 'M12 5H5v14h14v-7 M10 14l1-4 7-7 3 3-7 7z',
+  trash: 'M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13 M10 10v7 M14 10v7',
+};
+
+function iconAction(control, icon, label, school) {
+  const namespace = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(namespace, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(namespace, 'path');
+  path.setAttribute('d', actionIcons[icon]);
+  svg.append(path);
+  control.append(svg);
+  control.classList.add('icon-button', 'school-icon-action');
+  control.setAttribute('aria-label', `${label} · ${school}`);
+  control.title = label;
 }
 
 async function request(path, body) {
@@ -115,10 +136,12 @@ for (const button of filters) {
 }
 
 function trackerSummary(tracker) {
-  if (!tracker.enabled) return 'Paused';
   if (tracker.checking_until > Date.now()) return 'Checking portal…';
-  const summary = trackerStatus[tracker.result] ?? 'Waiting for first check';
-  return tracker.checked ? `${summary} · ${time(tracker.checked)}` : summary;
+  if (tracker.requested) return 'Check queued';
+  const summary = trackerStatus[tracker.result];
+  if (!summary) return tracker.enabled ? 'Waiting for first check' : 'Automatic checks off';
+  const checked = tracker.checked ? `${summary} · ${time(tracker.checked)}` : summary;
+  return tracker.enabled ? checked : `${checked} · Automatic checks off`;
 }
 
 function renderTrackers(records) {
@@ -202,13 +225,18 @@ defaultsForm.addEventListener('submit', async event => {
 });
 
 function renderCardActivity() {
+  const bySource = new Map(trackerRecords.map(record => [record.source, record]));
   const checking = new Set(trackerRecords.filter(record => record.checking_until > Date.now())
     .map(record => new URL(record.source).hostname));
+  const enabled = new Set(trackerRecords.filter(record => record.enabled).map(record => new URL(record.source).hostname));
   const unread = new Set(updates.filter(update => !update.read).map(update => new URL(update.source).hostname));
-  const tracked = new Set(trackerRecords.map(record => new URL(record.source).hostname));
   for (const card of schools.querySelectorAll('.school-card')) {
     const enable = card.querySelector('.enable-checks');
-    if (enable) enable.hidden = tracked.has(card.dataset.host);
+    if (enable) enable.hidden = enabled.has(card.dataset.host);
+    const status = card.querySelector('.school-check-status');
+    const tracker = bySource.get(card.dataset.trackerSource);
+    const summary = tracker ? trackerSummary(tracker) : '';
+    if (status.textContent !== summary) status.textContent = summary;
     const light = card.querySelector('.portal-light');
     const active = checking.has(card.dataset.host);
     const changed = unread.has(card.dataset.host);
@@ -231,6 +259,54 @@ let order = [];
 let savingOrder = false;
 let orderRevision = 0;
 
+const checkAll = document.querySelector('#check-all');
+let queuingChecks = false;
+
+function schoolsByHost(records) {
+  const result = new Map();
+  for (const record of records) {
+    const host = new URL(record.source).hostname;
+    if (!result.has(host)) result.set(host, record);
+  }
+  return result;
+}
+
+function portalAddress(record) {
+  const url = new URL(record.portal ?? record.source);
+  return url.protocol === 'https:' && !url.username && !url.password ? url : null;
+}
+
+function checkableSchools() {
+  return [...schoolsByHost(universityRecords).values()].flatMap(record => {
+    const url = portalAddress(record);
+    return url ? [{ url: url.href, school: record.school }] : [];
+  });
+}
+
+checkAll.addEventListener('click', async () => {
+  const targets = checkableSchools();
+  queuingChecks = checkAll.disabled = true;
+  arrangeMessage.textContent = 'Queuing school checks…';
+  let queued = 0;
+  const failed = [];
+  try {
+    for (const target of targets) {
+      try {
+        await request('/trackers/check', target);
+        queued++;
+      } catch {
+        failed.push(target.school);
+      }
+    }
+    arrangeMessage.textContent = `Queued ${queued} of ${targets.length} school checks.` +
+      (failed.length ? ' Could not queue: ' + failed.join(', ') + '.' : '');
+    await pollTrackers();
+  } finally {
+    queuingChecks = false;
+    checkAll.disabled = !checkableSchools().length;
+  }
+});
+
 function legacyOrder() {
   try {
     const saved = JSON.parse(localStorage.getItem(orderKey));
@@ -239,7 +315,7 @@ function legacyOrder() {
   return [];
 }
 
-async function moveSchool(host, destination, focusAction) {
+async function moveSchool(host, destination) {
   const from = order.indexOf(host);
   if (savingOrder || from < 0 || destination < 0 || destination >= order.length || from === destination) return;
   const next = [...order];
@@ -254,8 +330,7 @@ async function moveSchool(host, destination, focusAction) {
     lastData = undefined;
     renderSnapshots(universityRecords);
     const card = [...schools.children].find(element => element.dataset.host === host);
-    const button = card?.querySelector(`[data-move="${focusAction}"]:not(:disabled)`);
-    (button ?? card?.querySelector('button:not(:disabled)') ?? arrange).focus();
+    (card?.querySelector('.drag-handle') ?? arrange).focus();
     arrangeMessage.textContent = `${card.querySelector('h2').textContent} moved to position ${order.indexOf(host) + 1}.`;
   } catch {
     arrangeMessage.textContent = 'Could not save the card order. Try moving the card again.';
@@ -305,12 +380,9 @@ function dropSide(card, event) {
 
 function renderSnapshots(records) {
   universityRecords = records;
+  checkAll.disabled = queuingChecks || !checkableSchools().length;
   const open = new Set([...schools.querySelectorAll('details[open]')].map(element => element.dataset.source));
-  const byHost = new Map();
-  for (const record of records) {
-    const url = new URL(record.source);
-    if (!byHost.has(url.hostname)) byHost.set(url.hostname, record);
-  }
+  const byHost = schoolsByHost(records);
   order = [...new Set([...order.filter(host => byHost.has(host)), ...byHost.keys()])];
   arrange.setAttribute('aria-label', arranging ? 'Finish editing cards' : 'Edit cards');
   arrange.title = arrange.getAttribute('aria-label');
@@ -354,38 +426,47 @@ function renderSnapshots(records) {
     add(section, 'summary', 'View checklist');
     const footer = add(card, 'div');
     footer.className = 'school-footer';
-    const portal = new URL(record.portal ?? record.source);
-    if (portal.protocol === 'https:' && !portal.username && !portal.password) {
+    const portal = portalAddress(record);
+    if (portal) {
+      try {
+        const statusUrl = portal.pathname.startsWith('/account/')
+          ? new URL(portal.searchParams.get('r') || '/apply/status', portal)
+          : portal;
+        if (statusUrl.origin === portal.origin && statusUrl.protocol === 'https:') {
+          card.dataset.trackerSource = statusUrl.origin + statusUrl.pathname;
+        }
+      } catch {
+        // The card still opens the saved portal when the return address is invalid.
+      }
+    }
+    const checkStatus = add(body, 'small');
+    checkStatus.className = 'school-check-status';
+    if (arranging) {
+      const edit = add(footer, 'button');
+      edit.type = 'button';
+      iconAction(edit, 'edit', 'School settings', record.school);
+      edit.addEventListener('click', () => openSchool(record));
+      const remove = add(footer, 'button');
+      remove.type = 'button';
+      iconAction(remove, 'trash', 'Remove school', record.school);
+      remove.addEventListener('click', () => removeSchool(record, remove));
+    }
+    if (portal) {
       const launch = add(footer, 'a', 'Quick launch');
       launch.href = portal.href;
       launch.dataset.quickLaunch = record.source;
       launch.target = '_blank';
       launch.rel = 'noopener noreferrer';
       launch.className = 'launch';
-      launch.setAttribute('aria-label', 'Quick launch ' + record.school);
+      launch.setAttribute('aria-label', 'Quick launch · ' + record.school);
       const enable = add(footer, 'button', 'Enable checks');
       enable.type = 'button';
       enable.className = 'enable-checks';
+      footer.insertBefore(enable, launch);
       enable.addEventListener('click', async () => {
-        const statusUrl = new URL(portal);
-        statusUrl.hash = '';
-        if (statusUrl.pathname.startsWith('/account/')) {
-          const next = new URL(statusUrl.searchParams.get('r') || '/apply/status', statusUrl);
-          if (next.origin !== statusUrl.origin || next.pathname.startsWith('/account/')) {
-            arrangeMessage.textContent = 'Edit this school and enter its application status page address.';
-            return;
-          }
-          statusUrl.href = next.origin + next.pathname;
-          for (const key of ['cmd', 'tab']) {
-            const value = next.searchParams.get(key);
-            if (value && /^[a-z0-9_-]{1,40}$/i.test(value)) statusUrl.searchParams.set(key, value);
-          }
-        }
         enable.disabled = true;
         try {
-          await request('/trackers/register', {
-            source: statusUrl.origin + statusUrl.pathname, url: statusUrl.href, school: record.school
-          });
+          await request('/trackers/check', { url: portal.href, school: record.school, enable: true });
           arrangeMessage.textContent = 'Automatic checks enabled for ' + record.school + '.';
           await pollTrackers();
         } catch (error) {
@@ -407,8 +488,15 @@ function renderSnapshots(records) {
     const handle = add(header, 'span', '⠿');
     handle.className = 'drag-handle';
     handle.draggable = true;
-    handle.title = 'Drag to reorder';
-    handle.setAttribute('aria-hidden', 'true');
+    handle.tabIndex = 0;
+    handle.title = 'Drag to reorder or use the arrow keys';
+    handle.setAttribute('aria-label', 'Reorder ' + record.school + ' with the arrow keys');
+    handle.addEventListener('keydown', event => {
+      const delta = { ArrowUp: -1, ArrowLeft: -1, ArrowDown: 1, ArrowRight: 1 }[event.key];
+      if (!delta) return;
+      event.preventDefault();
+      moveSchool(host, order.indexOf(host) + delta);
+    });
     card.addEventListener('dragstart', event => {
       if (event.target !== handle && event.target !== card) {
         event.preventDefault();
@@ -437,30 +525,28 @@ function renderSnapshots(records) {
       card.classList.remove('drop-target');
       draggedSchool = undefined;
     });
-    if (arranging) {
-      const moves = add(card, 'div');
-      moves.className = 'card-moves';
-      const edit = add(moves, 'button', 'Edit school');
-      edit.type = 'button';
-      edit.addEventListener('click', () => openSchool(record));
-      for (const [delta, direction] of [[-1, 'earlier'], [1, 'later']]) {
-        const button = add(moves, 'button', 'Move ' + direction);
-        button.type = 'button';
-        button.dataset.move = direction;
-        button.setAttribute('aria-label', `Move ${record.school} ${direction}`);
-        button.disabled = index + delta < 0 || index + delta >= order.length;
-        button.addEventListener('click', () => moveSchool(host, index + delta, direction));
-      }
-    }
+
   }
   renderCardActivity();
 }
 
 let lastData;
-let refreshing = false;
-async function refresh() {
-  if (refreshing) return;
-  refreshing = true;
+let refreshing;
+async function refresh({ afterSave = false } = {}) {
+  if (refreshing) {
+    if (!afterSave) return refreshing;
+    await refreshing;
+    return refresh({ afterSave: true });
+  }
+  refreshing = loadDashboard();
+  try {
+    await refreshing;
+  } finally {
+    refreshing = undefined;
+  }
+}
+
+async function loadDashboard() {
   const revision = orderRevision;
   try {
     const data = await Promise.all(['/updates', '/snapshots', '/schools/order'].map(path => request(path)));
@@ -471,7 +557,8 @@ async function refresh() {
       try { localStorage.removeItem(orderKey); } catch {}
     }
     const serialized = data.map(value => JSON.stringify(value));
-    if (lastData?.[0] !== serialized[0]) {
+    if (lastData?.[0] !== serialized[0] || message.dataset.loadFailed) {
+      delete message.dataset.loadFailed;
       updates = data[0];
       renderUpdates();
     }
@@ -482,9 +569,8 @@ async function refresh() {
     lastData = serialized;
     renderCardActivity();
   } catch {
-    message.textContent = 'Could not load the dashboard. Refresh to try again.';
-  } finally {
-    refreshing = false;
+    message.dataset.loadFailed = 'true';
+    message.textContent = 'Could not load the dashboard. Coll-Track will retry.';
   }
 }
 refresh();
@@ -505,7 +591,7 @@ async function pollTrackers() {
       }
     }
     renderCardActivity();
-    if (completed && !draggedSchool) await refresh();
+    if ((completed || message.dataset.loadFailed) && !draggedSchool) await refresh();
   } catch {
     renderCardActivity();
   } finally {
@@ -609,6 +695,10 @@ function openBranding(host) {
 }
 
 document.querySelector('#branding-open').addEventListener('click', () => { schoolDialog.close(); openBranding(); });
+document.querySelector('#settings-branding').addEventListener('click', () => {
+  settingsDialog.close();
+  openBranding();
+});
 document.querySelector('#branding-close').addEventListener('click', () => brandingDialog.close());
 brandingDialog.addEventListener('close', () => { keyInput.value = ''; });
 modeForm.addEventListener('change', updateKeyField);
@@ -677,13 +767,6 @@ document.querySelector('#branding-reset').addEventListener('click', () => saveSc
 
 request('/branding/settings').then(settings => {
   brandingSettings = settings;
-  if (settings.mode) return;
-  const firstRender = new MutationObserver(() => {
-    firstRender.disconnect();
-    openBranding();
-  });
-  if (schools.childElementCount) openBranding();
-  else firstRender.observe(schools, { childList: true });
 }).catch(() => {});
 
 const schoolDialog = document.querySelector('#school-dialog');
@@ -691,20 +774,54 @@ const fields = document.querySelector('#school-fields');
 const schoolName = document.querySelector('#school-name');
 const schoolPortal = document.querySelector('#school-portal');
 const schoolMessage = document.querySelector('#school-message');
-const loginLink = document.querySelector('#school-login');
+const loginMode = document.querySelector('#school-login-mode');
+const loginFields = document.querySelector('#school-login-fields');
+const loginHint = document.querySelector('#school-login-hint');
+const loginEmail = document.querySelector('#school-login-email');
+const loginPassword = document.querySelector('#school-login-password');
+let schoolDialogVersion = 0;
 let editingSchool;
 
+function updateLoginFields() {
+  const needsCredentials = ['separate', 'new-default'].includes(loginMode.value);
+  loginFields.hidden = !needsCredentials;
+  loginEmail.required = loginPassword.required = needsCredentials;
+  loginEmail.disabled = loginPassword.disabled = !needsCredentials;
+  loginHint.hidden = loginMode.value !== 'new-default' || !loginMode.querySelector('option[value="default"]');
+}
+
+loginMode.addEventListener('change', updateLoginFields);
+
 function openSchool(record) {
+  const version = ++schoolDialogVersion;
   editingSchool = record;
-  document.querySelector('#school-dialog-title').textContent = record ? 'Edit school' : 'Add school';
+  document.querySelector('#school-dialog-title').textContent = record ? 'School settings' : 'Add school';
   document.querySelector('#school-edit-actions').hidden = !record;
   schoolName.value = record?.school ?? '';
   schoolPortal.value = record?.portal ?? record?.source ?? '';
-  loginLink.dataset.editLogin = record?.source ?? '';
-  loginLink.href = '#';
+  loginEmail.value = loginPassword.value = '';
+  loginMode.replaceChildren(
+    new Option(record ? 'Keep current login' : 'Set up later', 'keep'),
+    new Option('Save a separate login', 'separate'),
+    new Option('Create a default login', 'new-default')
+  );
+  updateLoginFields();
   schoolMessage.textContent = '';
   schoolDialog.showModal();
   schoolName.focus();
+  request('/trackers/profiles').then(profiles => {
+    if (schoolDialogVersion !== version || !schoolDialog.open) return;
+    const host = record ? new URL(record.source).hostname : null;
+    const defaultLogin = profiles.find(profile => profile.id === 'coll-track-default');
+    if (defaultLogin) {
+      loginMode.add(new Option('Use the default login', 'default'), 1);
+      loginMode.querySelector('option[value="new-default"]').textContent = 'Replace and use the default login';
+    }
+    for (const profile of profiles.filter(profile => profile !== defaultLogin && profile.hosts.includes(host))) {
+      loginMode.add(new Option('Use saved login: ' + profile.name, 'saved:' + profile.id));
+    }
+    updateLoginFields();
+  }).catch(() => {});
 }
 
 document.querySelector('#add-school').addEventListener('click', () => openSchool());
@@ -713,22 +830,49 @@ document.querySelector('#school-style').addEventListener('click', () => {
   schoolDialog.close();
   openBranding(new URL(editingSchool.source).hostname);
 });
-loginLink.addEventListener('click', event => {
-  if (event.defaultPrevented) return;
-  event.preventDefault();
-  schoolMessage.textContent = 'Open this dashboard in Chrome with the Coll-Track extension enabled to edit saved logins.';
+async function removeSchool(record, button) {
+  if (!record || !window.confirm(`Remove ${record.school} and its saved checklists, tracking settings, and updates?`)) return;
+  const status = schoolDialog.open ? schoolMessage : arrangeMessage;
+  button.disabled = true;
+  try {
+    const host = new URL(record.source).hostname;
+    await request('/schools/remove', { host });
+    brandingRequests.delete(host);
+    if (schoolDialog.open) schoolDialog.close();
+    arrangeMessage.textContent = `${record.school} removed.`;
+    await Promise.all([refresh({ afterSave: true }), pollTrackers()]);
+    if (!button.isConnected) arrange.focus();
+  } catch (error) {
+    status.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+document.querySelector('#remove-school').addEventListener('click', event => {
+  removeSchool(editingSchool, event.currentTarget);
+});
+
+schoolDialog.addEventListener('close', () => {
+  loginEmail.value = loginPassword.value = '';
 });
 
 fields.addEventListener('submit', async event => {
   event.preventDefault();
   fields.inert = true;
   try {
+    const selected = loginMode.value;
+    const login = selected.startsWith('saved:') ? { mode: 'saved', id: selected.slice(6) } : { mode: selected };
+    if (selected === 'separate' || selected === 'new-default') {
+      login.email = loginEmail.value.trim();
+      login.password = loginPassword.value;
+    }
     await request('/schools', {
-      name: schoolName.value, portal: schoolPortal.value,
+      login, name: schoolName.value, portal: schoolPortal.value,
       host: editingSchool ? new URL(editingSchool.source).hostname : undefined
     });
     schoolDialog.close();
-    await refresh();
+    await refresh({ afterSave: true });
   } catch (error) {
     schoolMessage.textContent = error.message;
   } finally {

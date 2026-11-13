@@ -16,8 +16,9 @@
   <main class="shell">
     <section class="school-section" aria-labelledby="saved-title">
       <div class="section-heading">
-        <h1 id="saved-title">My universities</h1>
+        <h1 id="saved-title">My schools</h1>
         <div class="school-actions">
+          <button id="check-all" type="button" disabled>Check all</button>
           <button id="arrange" class="icon-button" type="button" aria-pressed="false" aria-label="Edit cards" title="Edit cards"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M10 14l1-4 7-7 3 3-7 7-4 1Z"/></svg></button>
           <button id="add-school" class="icon-button" type="button" aria-label="Add school" title="Add school">+</button>
         </div>
@@ -54,6 +55,7 @@
       </form>
       <p id="tracker-message" role="status"></p>
       <ul id="trackers"></ul>
+      <button id="settings-branding" type="button">School branding</button>
     </section>
   </dialog>
   <dialog id="school-dialog" aria-labelledby="school-dialog-title">
@@ -67,11 +69,24 @@
         <input id="school-name" required maxlength="120">
         <label for="school-portal">Portal address</label>
         <input id="school-portal" type="url" required placeholder="https://">
+        <label for="school-login-mode">Portal login</label>
+        <select id="school-login-mode" name="login-mode">
+          <option value="keep">Set up later</option>
+          <option value="separate">Save a separate login</option>
+          <option value="new-default">Create a default login</option>
+        </select>
+        <div id="school-login-fields" hidden>
+          <label for="school-login-email">Email</label>
+          <input id="school-login-email" name="email" type="email" autocomplete="username" maxlength="1024">
+          <label for="school-login-password">Password</label>
+          <input id="school-login-password" name="password" type="password" autocomplete="current-password" maxlength="1024">
+        </div>
+        <p id="school-login-hint" class="hint" hidden>Replacing the default updates the login for every school that uses it.</p>
         <button class="branding-primary" type="submit">Save school</button>
         <p id="school-message" role="status"></p>
       </form>
       <div id="school-edit-actions" hidden>
-        <a id="school-login" class="launch" data-edit-login>Manage saved logins</a>
+        <button id="remove-school" type="button">Remove school</button>
         <button id="school-style" type="button">Edit color and logo</button>
         <button id="branding-open" type="button">Brandfetch settings</button>
       </div>

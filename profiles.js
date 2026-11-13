@@ -55,12 +55,6 @@ async function loadProfiles() {
     if (url.protocol !== 'https:' || url.username || url.password || url.port) return;
     launchSource = source;
     launchHost = url.hostname;
-    const matches = session.profiles.filter(profile => profile.hosts.includes(launchHost));
-    if (new URLSearchParams(location.search).has('edit') && matches.length) {
-      if (matches.length === 1) edit(matches[0]);
-      else notice.textContent = 'Choose a profile for ' + launchHost + ' from the list.';
-      return;
-    }
     edit();
     byId('profile-name').value = school.school;
     byId('profile-hosts').value = launchHost;

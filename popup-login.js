@@ -8,7 +8,7 @@ async function findLoginTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.url || tab.id == null) return null;
   const url = new URL(tab.url);
-  if (url.protocol !== 'https:' || url.port || url.pathname !== '/account/login') return null;
+  if (url.protocol !== 'https:' || url.port || url.pathname.replace(/\/$/, '') !== '/account/login') return null;
   return { id: tab.id, url };
 }
 
@@ -16,7 +16,11 @@ document.querySelector('#manage-profiles').addEventListener('click', () => {
   chrome.runtime.openOptionsPage();
 });
 
-document.querySelector('#open-dashboard').addEventListener('click', () => {
+const dashboardButton = document.querySelector('#open-dashboard');
+LocalBackend.request('/capabilities').then(({ dashboard }) => {
+  dashboardButton.hidden = !dashboard;
+}).catch(() => {});
+dashboardButton.addEventListener('click', () => {
   chrome.tabs.create({ url: LocalBackend.address });
 });
 
@@ -51,14 +55,13 @@ chooseLogin.addEventListener('submit', async event => {
   event.preventDefault();
   const profile = matchingLogins.find(saved => saved.id === loginSelect.value);
   if (!profile) return;
-  matchingLogins = [];
-  loginSelect.replaceChildren();
-  chooseLogin.hidden = true;
+  chooseLogin.inert = true;
   loginNotice.textContent = 'Submitting login…';
 
   try {
     const current = await findLoginTab();
     if (current?.id !== loginTab.id || current.url.href !== loginTab.url.href) {
+      chooseLogin.hidden = true;
       loginNotice.textContent = 'The active tab changed. Open the portal and try again.';
       return;
     }
@@ -73,9 +76,12 @@ chooseLogin.addEventListener('submit', async event => {
       changed: 'The login page changed. Open it and try again.',
       unsupported: 'Could not verify a standard Slate login form on this page.'
     };
+    if (attempt?.result === 'submitted' || attempt?.result === 'changed') chooseLogin.hidden = true;
     loginNotice.textContent = messages[attempt?.result] ?? 'Could not submit login.';
   } catch {
     loginNotice.textContent = 'Could not submit login. Check the portal before trying again.';
+  } finally {
+    chooseLogin.inert = false;
   }
 });
 
@@ -112,7 +118,7 @@ async function detectSchool() {
     if (scan?.result !== 'supported') return;
     const saved = await LocalBackend.request('/snapshots');
     if (saved.some(record => new URL(record.source).hostname === tab.url.hostname)) return;
-    const target = new URL(tab.url.searchParams.get('r') || tab.url.pathname, tab.url);
+    const target = new URL(tab.url.searchParams.get('r') || '/apply/status', tab.url);
     const safeTarget = new URL(tab.url.origin);
     safeTarget.pathname = target.pathname;
     for (const key of ['cmd', 'tab']) {
@@ -135,10 +141,9 @@ schoolForm.addEventListener('submit', async event => {
   try {
     const { source } = await LocalBackend.request('/schools', { name: schoolName.value, portal: schoolPortal.value });
     const host = new URL(schoolPortal.value).hostname;
-    schoolStatus.textContent = 'Added to My universities.';
+    schoolStatus.textContent = 'Added to My schools.';
     if (detectedSchool && new URL(detectedSchool.portal).hostname === host) importSchool.hidden = true;
-    setUpLogin.href = chrome.runtime.getURL('profiles.html') + '?' +
-      new URLSearchParams({ source, edit: '1' });
+    setUpLogin.href = chrome.runtime.getURL('quick-launch.html') + '?' + new URLSearchParams({ source });
     setUpLogin.target = '_blank';
     setUpLogin.hidden = false;
   } catch (error) {

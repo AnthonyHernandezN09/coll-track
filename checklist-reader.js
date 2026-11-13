@@ -11,15 +11,16 @@
   ]);
   const clean = value => (value ?? '').replace(/\s+/g, ' ').trim();
   const label = value => clean(value).toLowerCase().replace(/:$/, '');
-  const visible = element => {
+  function isVisible(element, ignoreAriaHidden) {
     const view = element.ownerDocument.defaultView;
     for (let node = element; node; node = node.parentElement) {
-      if (node.hidden || node.getAttribute('aria-hidden') === 'true') return false;
+      if (node.hidden || (!ignoreAriaHidden && node.getAttribute('aria-hidden') === 'true')) return false;
       const style = view?.getComputedStyle(node);
       if (style?.display === 'none' || style?.visibility === 'hidden') return false;
     }
     return true;
-  };
+  }
+  const visible = element => isVisible(element, false);
 
   function checklistKind(title) {
     const name = label(title);
@@ -35,7 +36,7 @@
   function columnRole(value) {
     const name = label(value);
     if (/^(?:status|item status|requirement status|document status|completion status)$/.test(name)) return 'status';
-    if (/^(?:items?|details?|requirements?|materials?|documents?|forms?|checklist item|document name|material name)$/.test(name)) return 'item';
+    if (/^(?:items?|details?|requirements?|materials?|documents?|forms?|checklist item|(?:item|requirement|document|material|form) name)$/.test(name)) return 'item';
     if (/^(?:dates?|status date|date received|date complete|date completed|received date|completed date|due date|deadline)$/.test(name)) return 'date';
     return null;
   }
@@ -71,17 +72,23 @@
   const colSpan = cell => cell.colSpan ?? Number(cell.getAttribute('aria-colspan') ?? 1);
   const rowSpan = cell => cell.rowSpan ?? Number(cell.getAttribute('aria-rowspan') ?? 1);
 
-  function tableSchema(table) {
-    const groups = rowGroups(table);
+  function tableSchema(table, groups) {
     if (!groups) return null;
     const { rows, candidates, cellsOf } = groups;
     const schemas = candidates.flatMap(row => {
       const cells = cellsOf(row);
       const labels = cells.map(cell => clean(cell.innerText ?? cell.textContent));
       const roles = labels.map(columnRole);
+      const details = labels.map(value => /^details?$/.test(label(value)));
+      if (roles.filter((role, index) => role === 'item' && !details[index]).length === 1) {
+        for (const [index, isDetails] of details.entries()) {
+          if (isDetails) roles[index] = null;
+        }
+      }
       const widths = cells.map(colSpan);
       if (cells.some((cell, index) =>
-        rowSpan(cell) !== 1 || !visible(cell) ||
+        rowSpan(cell) !== 1 ||
+        (!visible(cell) && (roles[index] === 'status' || roles[index] === 'item')) ||
         (widths[index] !== 1 && !(roles[index] === 'status' && widths[index] === 2))
       )) return [];
       if (['status', 'item'].some(role => roles.filter(value => value === role).length !== 1)) return [];
@@ -126,6 +133,10 @@
       const status = statusLabels.get(label(raw).replace(/^status\s*:\s*/, ''));
       if (status) known.set(status, raw);
     }
+    if (!rawText && !cues.length && cells.some(cell => visible(cell) &&
+      Array.from(cell.querySelectorAll('svg.bi-check-lg')).some(icon => isVisible(icon, true)))) {
+      known.set('complete', 'Complete');
+    }
     return {
       status: known.size === 1 ? known.keys().next().value : 'unknown',
       rawStatus: rawText || (known.size === 1 ? known.values().next().value : '') || null
@@ -134,7 +145,8 @@
 
   function readChecklists(root = document) {
     const checklists = [];
-    const unreadable = [];
+    const unmatched = new Map();
+    const inferred = [];
     const headings = new Map();
     const candidates = headingSelector + ',' + tableSelector + ',div,section,ul';
     for (const element of root.querySelectorAll(candidates)) {
@@ -152,17 +164,21 @@
       const heading = headings.get(scope);
       const title = checklistKind(explicitTitle) ? explicitTitle : heading;
       const kind = checklistKind(title);
-      if (!kind || !visible(element)) continue;
+      if (!visible(element) || (!kind && !element.matches(tableSelector))) continue;
 
       const semantic = element.matches(tableSelector);
-      const schema = tableSchema(element);
+      const groups = rowGroups(element);
+      const schema = tableSchema(element, groups);
       if (!schema) {
-        if (semantic && !element.querySelector(tableSelector)) {
-          unreadable.push({ title, reason: 'unrecognized_columns' });
+        if (kind && semantic && !element.querySelector(tableSelector)) {
+          const hasStatus = groups?.candidates.some(row =>
+            groups.cellsOf(row).some(cell => columnRole(cell.innerText ?? cell.textContent) === 'status'));
+          if (hasStatus) {
+            unmatched.set(scope, title);
+          }
         }
         continue;
       }
-      headings.delete(scope);
 
       const statusColumn = schema.roles.indexOf('status');
       const itemColumn = schema.roles.indexOf('item');
@@ -179,7 +195,7 @@
         const cells = schema.cellsOf(row);
         if (cells.length !== width ||
             cells.some(cell => colSpan(cell) !== 1 || rowSpan(cell) !== 1) ||
-            !visible(cells[itemIndex]) || (dateIndex >= 0 && !visible(cells[dateIndex]))) {
+            !visible(cells[itemIndex])) {
           skippedRows++;
           continue;
         }
@@ -196,13 +212,23 @@
           dateText: dateText && label(dateText) !== 'none' ? dateText : null
         });
       }
-      checklists.push({
-        title, kind,
+      if (!kind) {
+        const genericItem = /^(?:items?|details?)$/.test(label(schema.labels[itemColumn]));
+        const applicationContext = element.ownerDocument.location?.pathname.replace(/\/$/, '') === '/apply/status';
+        if (!applicationContext || genericItem || skippedRows || !items.length ||
+            !items.every(item => item.status !== 'unknown')) continue;
+      } else {
+        headings.delete(scope);
+      }
+      (kind ? checklists : inferred).push({
+        title: kind ? title : 'Application Checklist', kind: kind ?? 'admissions',
         dateLabel: schema.labels[dateColumn] ?? null,
         skippedRows,
         items
       });
     }
+    const unreadable = [...unmatched.values()].map(title => ({ title, reason: 'unrecognized_columns' }));
+    if (!checklists.length && !unreadable.length && inferred.length === 1) checklists.push(inferred[0]);
     return { checklists, unreadable };
   }
 

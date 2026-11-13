@@ -10,7 +10,7 @@
 body { margin: 0; }
 .shell { max-width: 76rem; margin: auto; padding-inline: clamp(16px, 4vw, 48px); }
 header { background: #202020; color: white; border-bottom: 4px solid var(--gold); }
-header .shell { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 22px; padding-block: 14px; }
+header .shell { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding-block: 14px; }
 header a { color: white; font-size: 1.25rem; font-weight: 750; text-decoration: none; }
 header span { color: #e2e2df; }
 main { padding-block: 28px 40px; }
@@ -68,17 +68,18 @@ details + details { border-top: 1px solid var(--line); }
 .school-card {
   display: flex;
   flex-direction: column;
+  position: relative;
   min-height: 230px;
   min-width: 0;
   background: white;
   border: 1px solid var(--line);
   border-top: 4px solid var(--school-color, #606b65);
-  border-radius: 8px;
-  box-shadow: 0 2px 5px #20202016;
+  border-radius: 7px;
+  box-shadow: 0 2px 7px #20202024;
   overflow-wrap: anywhere;
 }
 .school-card-header { display: flex; align-items: center; gap: 12px; padding: 16px; border-bottom: 1px solid var(--line); }
-.school-card-header h2 { margin: 0; }
+.school-card-header h2 { flex: 1; margin: 0; }
 .school-mark {
   display: grid;
   place-items: center;
@@ -95,20 +96,10 @@ details + details { border-top: 1px solid var(--line); }
 .school-body p { margin: 0 0 4px; }
 .school-body details { margin-top: 5px; }
 .school-body details li { padding-block: 8px; }
-.school-footer { padding: 0 16px 12px; }
-.school-footer .launch { margin: 0; }
+.school-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 16px 12px; }
+.school-footer .launch { margin: 0 0 0 auto; }
 .school-card[draggable="true"] { cursor: grab; }
-.school-card.drop-target { outline: 3px solid #1755a5; outline-offset: 2px; }
-.card-moves { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 12px; }
-.card-moves button { margin: 0; }
 
-.school-card {
-  position: relative;
-  border-radius: 7px;
-  box-shadow: 0 2px 7px #20202024;
-}
-.school-card-header { align-items: center; }
-.school-card-header h2 { flex: 1; }
 .drag-handle {
   display: grid;
   place-items: center;
@@ -119,7 +110,6 @@ details + details { border-top: 1px solid var(--line); }
   cursor: grab;
   user-select: none;
 }
-.school-card.drop-target { outline: none; }
 .school-card.drop-target::before {
   content: '';
   position: absolute;
@@ -225,7 +215,7 @@ details + details { border-top: 1px solid var(--line); }
 }
 #school-dialog::backdrop { background: #20202080; }
 #school-fields label { display: block; margin-block: 6px; font-weight: 650; }
-#school-fields input {
+#school-fields input, #school-fields select {
   box-sizing: border-box;
   width: 100%;
   min-height: 44px;
@@ -236,13 +226,11 @@ details + details { border-top: 1px solid var(--line); }
   font: inherit;
 }
 #school-edit-actions:not([hidden]) { display: grid; align-content: start; gap: 8px; }
-#school-edit-actions .launch { justify-content: center; margin: 0; }
 
 #branding-dialog.single-school { width: min(28rem, calc(100% - 24px)); }
 #branding-dialog.single-school .branding-panels,
 #school-dialog .branding-panels:has(#school-edit-actions[hidden]) { grid-template-columns: minmax(0, 1fr); }
 
-header .shell { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; }
 #settings-open { margin-inline-start: auto; background: #202020; color: white; border-color: #a6a6a6; }
 #settings-dialog {
   width: min(36rem, calc(100% - 24px));
@@ -285,4 +273,24 @@ header .shell { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; 
   .portal-light.checking, .portal-light.unread { animation: none; }
 }
 
-.school-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+
+.school-icon-action {
+  box-sizing: border-box;
+  min-height: 44px;
+  flex: 0 0 44px;
+  border-radius: 8px;
+}
+.school-icon-action svg { stroke-linecap: round; stroke-linejoin: round; }
+.school-icon-action:focus-visible { outline: 2px solid #1f5f96; outline-offset: 2px; }
+
+@media (max-width: 360px) {
+  .school-card-header { gap: 8px; }
+  .school-card-header, .school-body, .school-footer { padding-inline: 12px; }
+  .school-footer .launch { max-width: 100%; box-sizing: border-box; }
+}
+
+.school-check-status { margin-top: 6px; }
+.school-check-status:empty { display: none; }
+
+#settings-branding { margin-top: 16px; }

@@ -25,14 +25,21 @@
       <input id="new-school-portal" type="url" required placeholder="https://">
       <button type="submit">Save school</button>
       <p id="add-school-message" role="status"></p>
-      <a id="set-up-login" hidden>Set up saved login</a>
+      <a id="set-up-login" hidden>Set up login or launch portal</a>
     </form>
     <p id="instructions">Import from your open college checklist.</p>
     <div class="actions">
       <button id="import" type="button">Import checklist</button>
-      <button id="track" type="button" hidden>Track this portal</button>
       <button id="download" type="button" hidden>Download JSON</button>
     </div>
+    <form id="tracking-settings" hidden>
+      <label for="tracking-interval">Check every (minutes)</label>
+      <input id="tracking-interval" type="number" min="1" max="10080" value="60" required>
+      <label for="tracking-profile">Saved login</label>
+      <select id="tracking-profile"></select>
+      <button type="submit">Save schedule</button>
+      <button id="pause-track" type="submit" hidden>Pause checks</button>
+    </form>
     <section id="login-profiles">
       <div class="actions">
         <button id="manage-profiles" type="button">Manage logins</button>
